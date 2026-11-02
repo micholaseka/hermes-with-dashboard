@@ -120,6 +120,7 @@ async function runAccountManagerSmokeTest() {
 
 const notifier = new TelegramNotifier();
 const hermesWebhook = new HermesWebhook();
+const notifiedUnreadMap = new Map(); // accountId -> last notified unread count
 const replySessions = new Map(); // accountId -> MarketplaceSession aktif buat reply manual
 
 let rotationState = {
@@ -222,25 +223,24 @@ function createRotator() {
 
     if (usable) {
       const account = manager.getAccount(accountId);
-      const lastNotified =
-        manager.getStatus(accountId)?.lastNotifiedUnreadCount ?? null;
 
-      // Hanya kirim webhook kalau unread count benar-benar naik sejak
-      // notifikasi terakhir. Pada check pertama (lastNotified === null),
-      // set baseline tanpa kirim webhook untuk cegah flooding saat restart.
-      if (lastNotified === null) {
+      if (unreadCount > 0) {
+        if (notifiedUnreadMap.get(accountId) !== unreadCount) {
+          notifiedUnreadMap.set(accountId, unreadCount);
+          manager.updateStatus(accountId, {
+            lastNotifiedUnreadCount: unreadCount,
+          });
+          void hermesWebhook.notifyIfNewInboxMessages({
+            accountId,
+            accountName: account?.name ?? accountId,
+            unreadCount,
+            previousUnreadCount: 0,
+          });
+        }
+      } else {
+        notifiedUnreadMap.delete(accountId);
         manager.updateStatus(accountId, {
-          lastNotifiedUnreadCount: unreadCount,
-        });
-      } else if (unreadCount > lastNotified) {
-        manager.updateStatus(accountId, {
-          lastNotifiedUnreadCount: unreadCount,
-        });
-        void hermesWebhook.notifyIfNewInboxMessages({
-          accountId,
-          accountName: account?.name ?? accountId,
-          unreadCount,
-          previousUnreadCount: lastNotified,
+          lastNotifiedUnreadCount: 0,
         });
       }
     }

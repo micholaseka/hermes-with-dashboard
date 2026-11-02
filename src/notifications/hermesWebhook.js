@@ -1,5 +1,5 @@
 const DEFAULT_HERMES_WEBHOOK_URL =
-  "http://localhost:8644/webhooks/BotWatcher-Dashboard";
+  "http://localhost:8765/webhooks/BotWatcher-Dashboard";
 const REQUEST_TIMEOUT_MS = 5000;
 
 export class HermesWebhook {
