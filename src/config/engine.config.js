@@ -13,12 +13,30 @@
 //                      Profile 2, dst). Dipakai nanti saat aplikasi jadi.
 
 import path from "path";
+import os from "os";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
 
 export const ENGINE_MODE = process.env.ENGINE_MODE || "dev"; // "dev" | "chrome-portable"
+
+/**
+ * Mendapatkan direktori data Electron default berdasarkan OS:
+ * - Windows 10/11: %APPDATA%\Electron (mis. C:\Users\<user>\AppData\Roaming\Electron)
+ * - Linux: ~/.config/Electron
+ */
+export function getDefaultDataDir() {
+  if (process.env.BOTWATCHER_DATA_DIR) {
+    return process.env.BOTWATCHER_DATA_DIR;
+  }
+  if (process.platform === "win32") {
+    const appData =
+      process.env.APPDATA || path.win32.join(os.homedir(), "AppData", "Roaming");
+    return path.win32.join(appData, "Electron");
+  }
+  return path.join(os.homedir(), ".config", "Electron");
+}
 
 export const engineConfig = {
   // ---- Mode "dev": Chromium patchright dengan profil permanen ----
@@ -54,8 +72,7 @@ export function getSessionConfig() {
     return engineConfig.chromePortable;
   }
 
-  const dataRoot =
-    process.env.BOTWATCHER_DATA_DIR || PROJECT_ROOT;
+  const dataRoot = getDefaultDataDir();
 
   return {
     ...engineConfig.dev,

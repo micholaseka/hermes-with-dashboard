@@ -27,6 +27,7 @@ export function createDatabase(dbPath) {
       state TEXT NOT NULL DEFAULT 'idle',
       logged_in INTEGER,
       unread_count INTEGER,
+      last_notified_unread_count INTEGER,
       last_checked_at TEXT,
       last_error TEXT,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -67,6 +68,21 @@ export function createDatabase(dbPath) {
 
   if (!accountColumns.includes("post_count")) {
     db.exec("ALTER TABLE accounts ADD COLUMN post_count INTEGER;");
+  }
+
+  // Migrasi: kolom last_notified_unread_count di account_status (untuk
+  // mencegah webhook "ada inbox nih" dikirim berulang saat unread count
+  // tidak berubah). DB lama sudah punya tabel account_status, jadi butuh
+  // ALTER eksplisit.
+  const statusColumns = db
+    .prepare("PRAGMA table_info(account_status)")
+    .all()
+    .map((row) => row.name);
+
+  if (!statusColumns.includes("last_notified_unread_count")) {
+    db.exec(
+      "ALTER TABLE account_status ADD COLUMN last_notified_unread_count INTEGER;",
+    );
   }
 
   return db;

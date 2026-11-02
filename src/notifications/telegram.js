@@ -12,7 +12,11 @@ const TELEGRAM_API = "https://api.telegram.org";
 export class TelegramNotifier {
   constructor({ botToken, chatId } = {}) {
     this.botToken = botToken || process.env.TELEGRAM_BOT_TOKEN || "";
-    this.chatId = chatId || process.env.TELEGRAM_CHAT_ID || "";
+    this.chatId =
+      chatId ||
+      process.env.TELEGRAM_CHAT_ID ||
+      process.env.TELEGRAM_HOME_CHANNEL ||
+      "";
     this.consoleOnly = !this.botToken || !this.chatId;
 
     if (this.consoleOnly) {
@@ -57,6 +61,44 @@ export class TelegramNotifier {
       // Kegagalan kirim Telegram TIDAK BOLEH menghentikan siklus pemantauan.
       // Cukup log error di sini.
       console.error(`[TelegramNotifier] Gagal kirim: ${err.message}`);
+    }
+  }
+
+  // Dipanggil saat akun Facebook terdeteksi bermasalah (checkpoint, banned,
+  // sesi kadaluarsa / logout) agar admin segera tahu dan bisa login ulang.
+  async notifyAccountError(accountLabel, reason) {
+    const text =
+      `⚠️ PERINGATAN AKUN FACEBOOK!\n` +
+      `Akun: ${accountLabel}\n` +
+      `Status: ${reason || "Sesi terputus / perlu login ulang"}\n\n` +
+      `Silakan buka BotWatcher Dashboard dan klik 'Balas Sekarang' / 'Login Ulang' untuk memulihkan sesi akun ini.`;
+
+    if (this.consoleOnly) {
+      console.log(`[TelegramNotifier] (console-only alert) ${text}`);
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `${TELEGRAM_API}/bot${this.botToken}/sendMessage`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: this.chatId,
+            text,
+          }),
+        },
+      );
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        console.error(
+          `[TelegramNotifier] Gagal kirim alert (HTTP ${res.status}): ${body}`,
+        );
+      }
+    } catch (err) {
+      console.error(`[TelegramNotifier] Gagal kirim alert: ${err.message}`);
     }
   }
 }

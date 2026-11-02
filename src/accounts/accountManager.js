@@ -72,6 +72,11 @@ function mapStatus(account, row) {
         ? null
         : Number(row.unread_count),
 
+    lastNotifiedUnreadCount:
+      row?.last_notified_unread_count === null || row?.last_notified_unread_count === undefined
+        ? null
+        : Number(row.last_notified_unread_count),
+
     lastCheckedAt: row?.last_checked_at ? new Date(row.last_checked_at) : null,
 
     error: row?.last_error ?? null,
@@ -337,6 +342,10 @@ export class AccountManager extends EventEmitter {
       city: account.city,
       postCount: account.postCount ?? null,
       enabled: account.enabled,
+      lastNotifiedUnreadCount:
+        patch.lastNotifiedUnreadCount !== undefined
+          ? patch.lastNotifiedUnreadCount
+          : current.lastNotifiedUnreadCount,
     };
 
     this.repository.updateStatus(accountId, next);

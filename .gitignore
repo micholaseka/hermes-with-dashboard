@@ -11,6 +11,7 @@ ui-design/node_modules/
 accounts.json
 accounts.local.json
 storage/sessions/*.json
+storage/pending_locations.json
 storage/profiles/
 storage/user-data/
 storage/*.db

@@ -198,8 +198,9 @@ function createRotator() {
       loggedIn === true &&
       unreadCount !== null &&
       unreadCount !== undefined;
-    const previousUnreadCount =
-      manager.getStatus(accountId)?.unreadCount ?? null;
+    const currentStatus = manager.getStatus(accountId);
+    const previousState = currentStatus?.state ?? "monitoring";
+    const previousUnreadCount = currentStatus?.unreadCount ?? null;
 
     manager.updateStatus(accountId, {
       loggedIn: usable,
@@ -210,26 +211,56 @@ function createRotator() {
     });
     broadcastStatus();
 
-    if (usable && unreadCount > 0) {
+    // Alert admin Telegram kalau akun berubah status menjadi offline/bermasalah
+    if (!usable && previousState !== "offline") {
       const account = manager.getAccount(accountId);
-      notifier.notifyUnread(account?.name ?? accountId, unreadCount);
+      void notifier.notifyAccountError(
+        account?.name ?? accountId,
+        reason ?? "Akun tidak dapat diakses / sesi kadaluarsa",
+      );
     }
 
     if (usable) {
       const account = manager.getAccount(accountId);
-      void hermesWebhook.notifyIfNewInboxMessages({
-        accountId,
-        accountName: account?.name ?? accountId,
-        unreadCount,
-        previousUnreadCount,
-      });
+      const lastNotified =
+        manager.getStatus(accountId)?.lastNotifiedUnreadCount ?? null;
+
+      // Hanya kirim webhook kalau unread count benar-benar naik sejak
+      // notifikasi terakhir. Pada check pertama (lastNotified === null),
+      // set baseline tanpa kirim webhook untuk cegah flooding saat restart.
+      if (lastNotified === null) {
+        manager.updateStatus(accountId, {
+          lastNotifiedUnreadCount: unreadCount,
+        });
+      } else if (unreadCount > lastNotified) {
+        manager.updateStatus(accountId, {
+          lastNotifiedUnreadCount: unreadCount,
+        });
+        void hermesWebhook.notifyIfNewInboxMessages({
+          accountId,
+          accountName: account?.name ?? accountId,
+          unreadCount,
+          previousUnreadCount: lastNotified,
+        });
+      }
     }
   });
 
   r.on("error", ({ accountId, error }) => {
+    const currentStatus = manager.getStatus(accountId);
+    const previousState = currentStatus?.state ?? "monitoring";
+
     manager.updateStatus(accountId, { state: "error", error: error.message });
     broadcastStatus();
     broadcastLog(`[${accountId}] ${error.message}`, "error");
+
+    if (previousState !== "error") {
+      const account = manager.getAccount(accountId);
+      void notifier.notifyAccountError(
+        account?.name ?? accountId,
+        error?.message ?? "Terjadi kesalahan saat memeriksa akun",
+      );
+    }
   });
 
   return r;

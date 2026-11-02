@@ -40,6 +40,18 @@ export const marketplaceInboxSelectors = {
   // di sini.
   unreadBadge: 'a[href*="targetTab=SELLER"] span[dir="auto"]',
 
+  // URL Inbox Penjual asli - tempat daftar obrolan pembeli dan chat thread
+  sellerInboxUrl: "https://www.facebook.com/marketplace/inbox/?targetTab=SELLER&locale=id_ID",
+
+  // Daftar obrolan di halaman Seller Inbox (di dalam kontainer role="main")
+  conversationItem: 'div[role="main"] div[role="button"][tabindex="0"]',
+
+  // Messenger floating chat container & log
+  chatLog: 'div[role="log"][aria-label*="Messages in conversation"], div[role="log"]',
+  composerRegion: 'div[role="region"][aria-label="Thread composer"]',
+  chatInput: 'div[role="textbox"][contenteditable="true"]',
+  sendButton: 'div[aria-label="Press enter to send"], div[aria-label*="Kirim"], div[aria-label*="Send"]',
+
   unavailableText: [
     "your account has been suspended",
     "your account has been temporarily suspended",

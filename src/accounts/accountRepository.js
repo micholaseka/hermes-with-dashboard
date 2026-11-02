@@ -70,6 +70,7 @@ export class AccountRepository {
         COALESCE(s.state, 'idle') AS state,
         s.logged_in,
         s.unread_count,
+        s.last_notified_unread_count,
         s.last_checked_at,
         s.last_error
 
@@ -160,6 +161,7 @@ export class AccountRepository {
           state = ?,
           logged_in = ?,
           unread_count = ?,
+          last_notified_unread_count = ?,
           last_checked_at = ?,
           last_error = ?,
           updated_at = CURRENT_TIMESTAMP
@@ -174,6 +176,7 @@ export class AccountRepository {
             ? 1
             : 0,
         status.unreadCount ?? null,
+        status.lastNotifiedUnreadCount ?? null,
         status.lastCheckedAt
           ? new Date(status.lastCheckedAt).toISOString()
           : null,
