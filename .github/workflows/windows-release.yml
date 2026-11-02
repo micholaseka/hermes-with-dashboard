@@ -15,58 +15,8 @@ permissions:
   contents: write
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Install root dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install UI dependencies
-        working-directory: ui-design
-        run: pnpm install --frozen-lockfile
-
-      - name: Build React UI
-        run: pnpm run build:ui
-
-      - name: Verify Electron UI asset paths
-        run: |
-          if ! grep -Eq 'src="./assets/' ui-design/dist/index.html; then
-            echo "Vite production assets are not relative. Electron file:// packaging would produce a blank screen."
-            exit 1
-          fi
-
-      - name: Install bundled Chromium (patchright)
-        run: |
-          PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/playwright-browsers" \
-            pnpm exec patchright install chromium
-
-      - name: Build Linux packages
-        run: npx --yes electron-builder@26.15.7 --linux deb rpm --x64 --publish never
-
-      - name: Upload Linux packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-packages
-          path: |
-            release/*.deb
-            release/*.rpm
-          if-no-files-found: error
-
   build-windows:
     runs-on: windows-latest
-    needs: build-linux
 
     steps:
       - name: Checkout
@@ -163,33 +113,40 @@ jobs:
         id: release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $tag = "v$version"
 
           git fetch --tags --force
 
-          if (git tag --list $tag) {
-            Write-Host "Tag $tag sudah ada. Release baru tidak dibuat."
-            "created=false" >> $env:GITHUB_OUTPUT
-            "tag=$tag" >> $env:GITHUB_OUTPUT
-            exit 0
+          if (-not (git tag --list $tag)) {
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag $tag
+            git push origin $tag
+
+            if ($LASTEXITCODE -ne 0) {
+              throw "Gagal mengirim tag $tag ke origin."
+            }
+
+            Write-Host "Tag $tag berhasil dibuat dan dipush."
+          } else {
+            Write-Host "Tag $tag sudah ada."
           }
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag $tag
-          git push origin $tag
+          gh release view $tag --json tagName *> $null
+          $releaseExists = $LASTEXITCODE -eq 0
 
-          Write-Host "Tag $tag berhasil dibuat dan dipush."
-          "created=true" >> $env:GITHUB_OUTPUT
+          if ($releaseExists) {
+            Write-Host "GitHub Release $tag sudah ada. Tidak membuat ulang."
+            "created=false" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "GitHub Release $tag belum ada dan akan dibuat."
+            "created=true" >> $env:GITHUB_OUTPUT
+          }
           "tag=$tag" >> $env:GITHUB_OUTPUT
-
-      - name: Download Linux packages
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-packages
-          path: release
 
       - name: Create GitHub Release
         if: |
@@ -206,5 +163,3 @@ jobs:
             release/*.exe
             release/*.yml
             release/*.blockmap
-            release/*.deb
-            release/*.rpm

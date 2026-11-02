@@ -161,43 +161,25 @@ meng-upgrade instalasi NSIS.
 GitHub Actions workflow ada di
 `.github/workflows/windows-release.yml`:
 
-- Push ke `main` membangun UI dan Chromium Patchright, membuat installer
-  Windows serta paket Linux `.deb` dan `.rpm`, lalu menjalankan smoke test
-  packaged Windows app.
+- Push ke `main` dan run manual membangun UI dan Chromium Patchright di
+  Windows, lalu menjalankan smoke test packaged Windows app. Workflow ini
+  tidak menunggu build Linux.
 - Jika build berhasil dan tag `v<versi package.json>` belum ada, workflow
-  membuat tag dan GitHub Release serta mengunggah artefak `.exe`, `.yml`,
-  `.blockmap`, `.deb`, dan `.rpm`.
+  membuat tag. Jika GitHub Release untuk tag itu belum ada, workflow membuat
+  release dan mengunggah artefak `.exe`, `.yml`, serta `.blockmap`.
 - Run manual (`workflow_dispatch`) wajib memasukkan tag yang sama dengan
   versi di `package.json`; saat ini default-nya `v2.0.0`.
-- Jika tag sudah ada, push ke `main` tidak menerbitkan release baru. Untuk
-  rilis berikutnya, naikkan `version` di `package.json` dan pastikan tag
-  dengan versi itu belum digunakan.
+- Jika tag sudah ada tetapi GitHub Release belum ada, push ke `main` tetap
+  membuat release. Jika release sudah ada, push tidak menerbitkan ulang
+  release tersebut. Untuk rilis berikutnya, naikkan `version` di
+  `package.json`.
 
 Sebelum rilis: cek versi dan tag, pastikan workflow selesai sukses, lalu
 unduh Setup EXE dari GitHub Release dan uji upgrade tanpa menghapus instalasi
 lama maupun direktori data pengguna.
 
-## Installer Linux (.deb dan .rpm)
-
-Workflow release yang sama membangun paket Debian/Ubuntu (`.deb`) dan RPM
-Fedora (`.rpm`) untuk x86_64 di Ubuntu, lalu melampirkannya ke GitHub Release
-bersama artefak Windows. Unduh paket yang sesuai dari GitHub Release.
-
-Install di Debian/Ubuntu:
-
-```bash
-sudo apt install ./BotWatcher-Dashboard-<versi>-amd64.deb
-```
-
-Install di Fedora:
-
-```bash
-sudo dnf install ./BotWatcher-Dashboard-<versi>-x64.rpm
-```
-
-Kedua paket dibuat untuk x86_64 dan membutuhkan distribusi yang menyediakan
-dependensi runtime Electron/Chromium. Pengaturan akun dan profil browser
-disimpan di direktori data pengguna, terpisah dari lokasi instalasi.
+Workflow GitHub Actions release saat ini hanya membuat artefak Windows.
+Paket Linux `.deb` dan `.rpm` tidak dibuat atau dilampirkan oleh workflow ini.
 
 ## Struktur proyek
 
