@@ -52,7 +52,7 @@ export class AccountRotator extends EventEmitter {
       minBatchSize = 5,
       maxBatchSize = 10,
       delayBetweenBatchesMs = 5000,
-      roundIntervalMs = 15 * 60 * 1000,
+      roundIntervalMs = 5 * 60 * 1000,
     } = {},
   ) {
     super();

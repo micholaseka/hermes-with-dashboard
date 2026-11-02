@@ -11,7 +11,11 @@ export class TelegramListener {
     pendingStore,
     responseSender,
   }) {
-    this.token = telegramBotToken || process.env.TELEGRAM_BOT_TOKEN || "";
+    this.token =
+      telegramBotToken ||
+      process.env.TELEGRAM_CS_BOT_TOKEN ||
+      process.env.TELEGRAM_BOT_TOKEN ||
+      "";
     this.chatId = telegramChatId || process.env.TELEGRAM_CHAT_ID || "";
     this.processor = processor;
     this.pendingStore = pendingStore;
@@ -51,16 +55,19 @@ export class TelegramListener {
 
         if (res.status === 409 || data.error_code === 409) {
           console.warn(
-            "[telegram-listener] Konflik: Token bot sedang aktif di Hermes gateway. Polling dinonaktifkan (notifikasi outbound tetap aktif).",
+            "[telegram-listener] Konflik HTTP 409: Token bot ini sedang aktif di sesi/gateway lain.\n" +
+            "  -> Untuk balasan live via Telegram, buat bot baru di @BotFather dan set TELEGRAM_CS_BOT_TOKEN di .env.\n" +
+            "  -> Balasan lokasi juga bisa dikirim via HTTP POST /api/reply-location."
           );
-          this.running = false;
-          break;
+          // Tunggu 30 detik sebelum mencoba lagi agar tidak flooding
+          await new Promise((r) => setTimeout(r, 30000));
+          continue;
         }
 
         if (data.ok && Array.isArray(data.result)) {
           for (const update of data.result) {
             this.offset = update.update_id + 1;
-            await this._handleUpdate(update);
+            await this.handleUpdate(update);
           }
         } else {
           await new Promise((r) => setTimeout(r, 3000));
@@ -74,7 +81,7 @@ export class TelegramListener {
     }
   }
 
-  async _handleUpdate(update) {
+  async handleUpdate(update) {
     const msg = update.message;
     if (!msg || !msg.text) return;
 

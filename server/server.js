@@ -21,8 +21,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Root project dir: server/server.js → project root
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 
-// Telegram credentials (optional). Console-only fallback jika kosong.
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+// Telegram credentials (optional). Mendukung token bot CS terpisah
+// agar tidak bentrok dengan Hermes Agent gateway.
+const TELEGRAM_BOT_TOKEN =
+  process.env.TELEGRAM_CS_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
 
 // Agar sessionResolver menemukan profil yang dibuat oleh Electron app
@@ -60,7 +62,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (reqPath !== WEBHOOK_PATH) {
+  const allowedPaths = [
+    WEBHOOK_PATH,
+    "/api/reply-location",
+    "/webhooks/telegram",
+  ];
+
+  if (!allowedPaths.includes(reqPath)) {
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Not found" }));
     return;
@@ -70,12 +78,67 @@ const server = http.createServer(async (req, res) => {
   for await (const chunk of req) chunks.push(chunk);
   const rawBody = Buffer.concat(chunks).toString("utf8");
 
+  let payload = {};
+  try {
+    payload = JSON.parse(rawBody);
+  } catch (err) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Invalid JSON: " + err.message }));
+    return;
+  }
+
+  // 1) Route balasan lokasi admin via API HTTP
+  if (reqPath === "/api/reply-location") {
+    try {
+      const ticketId = payload.ticketId;
+      const replyText = payload.replyText || payload.text;
+      if (!replyText) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Field 'replyText' atau 'text' wajib diisi." }));
+        return;
+      }
+
+      let ticket = null;
+      if (ticketId) {
+        ticket = await processor.pendingStore.getTicket(ticketId);
+      }
+      if (!ticket) {
+        ticket = await processor.pendingStore.getLatestPending();
+      }
+
+      if (!ticket) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Tidak ada tiket pending_lokasi aktif." }));
+        return;
+      }
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, ticketId: ticket.id }));
+
+      void processor.handleAdminLocationReply({
+        ticket,
+        replyText,
+      });
+    } catch (err) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // 2) Route webhook Telegram (update masuk via webhook alih-alih polling)
+  if (reqPath === "/webhooks/telegram") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true }));
+    void telegramListener.handleUpdate(payload);
+    return;
+  }
+
+  // 3) Route webhook BotWatcher Dashboard
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ ok: true }));
 
   try {
-    const payload = JSON.parse(rawBody);
-
     // Log ringkas: timestamp, accountId, unreadCount, delta.
     console.log(
       `[webhook] ${new Date().toISOString()} accountId=${payload.accountId} ` +

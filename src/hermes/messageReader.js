@@ -9,6 +9,9 @@ import { marketplaceInboxSelectors as sel } from "../monitor/selectors.js";
 
 const NAV_TIMEOUT_MS = 30_000;
 
+export const FB_MESSAGE_LABEL_REGEX =
+  /(?:sent\s+.+?\s+by\s+|dikirim\s+.+?\s+oleh\s+|at\s+.+?,\s+|pada\s+.+?,\s*)(.+?):\s*([\s\S]+)/i;
+
 export class MessageReader {
   constructor({ page }) {
     this.page = page;
@@ -94,16 +97,16 @@ export class MessageReader {
     await targetButton.click({ force: true });
     await this.page.waitForTimeout(3_000);
 
-    // Wait for composer textbox to be visible
+    // Wait for composer textbox to be visible (soft check agar tidak throw jika hanya membaca pesan)
     const input = this.page.locator(sel.chatInput).first();
     try {
-      await input.waitFor({ state: "visible", timeout: 10_000 });
+      await input.waitFor({ state: "visible", timeout: 8_000 });
     } catch {
       console.warn(
         "[messageReader] Chat input tidak langsung terlihat, mencoba klik ulang obrolan...",
       );
-      await targetButton.click({ force: true });
-      await input.waitFor({ state: "visible", timeout: 5_000 });
+      await targetButton.click({ force: true }).catch(() => {});
+      await input.waitFor({ state: "visible", timeout: 4_000 }).catch(() => {});
     }
 
     // 2) Parse message log to determine who spoke last
@@ -117,7 +120,7 @@ export class MessageReader {
       candidates.forEach((el) => {
         const label = el.getAttribute("aria-label") || "";
         const match = label.match(
-          /(?:sent\s+.+?\s+by\s+|At\s+.+?,\s+)(.+?):\s*([\s\S]+)/i,
+          /(?:sent\s+.+?\s+by\s+|dikirim\s+.+?\s+oleh\s+|at\s+.+?,\s+|pada\s+.+?,\s*)(.+?):\s*([\s\S]+)/i,
         );
         if (match) {
           const senderRaw = match[1].trim();

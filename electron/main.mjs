@@ -161,7 +161,8 @@ function createRotator() {
     minBatchSize: 5,
     maxBatchSize: 10,
     delayBetweenBatchesMs: 5000,
-    roundIntervalMs: 15 * 60 * 1000,
+    roundIntervalMs:
+      Number(process.env.ROTATION_INTERVAL_MS) || 5 * 60 * 1000,
   });
 
   r.on("log", (message, level) => broadcastLog(message, level));

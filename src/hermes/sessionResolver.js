@@ -71,8 +71,8 @@ export class HermesSessionResolver extends EventEmitter {
       this.session = null;
     }
 
-    // Create new session.
-    this.session = new MarketplaceSession({ accountId });
+    // Create new session (selalu headless di background Hermes)
+    this.session = new MarketplaceSession({ accountId, headless: true });
     this.session.on("login_status", (status) => {
       this.emit("login_status", status);
     });
@@ -98,9 +98,9 @@ export class HermesSessionResolver extends EventEmitter {
     });
   }
 
-  close() {
+  async close() {
     if (this.session) {
-      this.session.close().catch(() => {});
+      await this.session.close().catch(() => {});
       this.session = null;
     }
   }
