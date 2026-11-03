@@ -73,8 +73,12 @@ export class FBMarketplaceReplySender {
       await this.page.keyboard.press("Enter");
     }
 
-    // 4) Wait for message submission to complete
+    // 4) Verify the composer cleared after submission.
     await this.page.waitForTimeout(3_000);
+    const remainingText = await input.innerText().catch(() => "");
+    if (remainingText.trim()) {
+      throw new Error("Balasan Facebook belum terverifikasi terkirim: composer masih berisi teks.");
+    }
     return true;
   }
 }

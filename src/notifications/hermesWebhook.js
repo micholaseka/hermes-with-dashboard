@@ -24,11 +24,15 @@ export class HermesWebhook {
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    const headers = { "Content-Type": "application/json" };
+    if (process.env.HERMES_WEBHOOK_SECRET) {
+      headers["x-hermes-secret"] = process.env.HERMES_WEBHOOK_SECRET;
+    }
 
     try {
       const response = await fetch(this.url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         signal: controller.signal,
         body: JSON.stringify({
           signal: "wake",

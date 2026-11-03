@@ -13,7 +13,13 @@ import { Processor } from "../src/hermes/processor.js";
 import { TelegramListener } from "../src/hermes/telegramListener.js";
 
 const PORT = Number(process.env.PORT || 8765);
+const HOST = process.env.HERMES_HOST || "127.0.0.1";
 const WEBHOOK_PATH = "/webhooks/BotWatcher-Dashboard";
+const WEBHOOK_SECRET = process.env.HERMES_WEBHOOK_SECRET || "";
+
+function isAuthorized(req) {
+  return Boolean(WEBHOOK_SECRET) && req.headers["x-hermes-secret"] === WEBHOOK_SECRET;
+}
 
 // ES module: __dirname equivalent
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -62,6 +68,14 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (!isAuthorized(req)) {
+    res.writeHead(WEBHOOK_SECRET ? 401 : 503, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      error: WEBHOOK_SECRET ? "Unauthorized" : "HERMES_WEBHOOK_SECRET belum dikonfigurasi",
+    }));
+    return;
+  }
+
   const allowedPaths = [
     WEBHOOK_PATH,
     "/api/reply-location",
@@ -92,6 +106,11 @@ const server = http.createServer(async (req, res) => {
     try {
       const ticketId = payload.ticketId;
       const replyText = payload.replyText || payload.text;
+      if (!ticketId) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Field 'ticketId' wajib diisi." }));
+        return;
+      }
       if (!replyText) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Field 'replyText' atau 'text' wajib diisi." }));
@@ -99,13 +118,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       let ticket = null;
-      if (ticketId) {
-        ticket = await processor.pendingStore.getTicket(ticketId);
-      }
-      if (!ticket) {
-        ticket = await processor.pendingStore.getLatestPending();
-      }
-
+      ticket = await processor.pendingStore.getTicket(ticketId);
       if (!ticket) {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Tidak ada tiket pending_lokasi aktif." }));
@@ -173,7 +186,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   console.log(`[hermes] webhook server listening on :${PORT}`);
   telegramListener.start();
 });

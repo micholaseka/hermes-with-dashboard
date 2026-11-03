@@ -59,7 +59,15 @@ export class PendingLocationStore {
       completedAt: null,
     };
 
-    // Remove older duplicate if exists
+    const duplicate = this.tickets.find(
+      (t) =>
+        t.status === "pending" &&
+        t.accountId === ticket.accountId &&
+        t.customerName === ticket.customerName &&
+        t.customerMessage === ticket.customerMessage,
+    );
+    if (duplicate) return duplicate;
+
     this.tickets = this.tickets.filter((t) => t.id !== ticket.id);
     this.tickets.push(ticket);
     await this.save();

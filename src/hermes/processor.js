@@ -32,12 +32,29 @@ export class Processor {
     this.pendingStore = new PendingLocationStore({
       storageDir: path.join(root, "storage"),
     });
+    this.accountLocks = new Map();
+  }
+
+  async _acquireAccount(accountId) {
+    const key = String(accountId);
+    const previous = this.accountLocks.get(key) || Promise.resolve();
+    let release;
+    const current = new Promise((resolve) => { release = resolve; });
+    const chain = previous.then(() => current);
+    this.accountLocks.set(key, chain);
+    await previous;
+    return () => {
+      release();
+      if (this.accountLocks.get(key) === chain) this.accountLocks.delete(key);
+    };
   }
 
   async process(payload) {
     const { accountId, accountName, unreadCount } = payload;
+    const releaseAccount = await this._acquireAccount(accountId);
 
     // 1) Resolve Playwright session
+    try {
     const session = await this.resolver.resolveSession(accountId);
     if (!session || !session.isLoggedIn) {
       throw new Error(`Sesi login tidak valid untuk akun "${accountId}".`);
@@ -97,11 +114,14 @@ export class Processor {
         }
 
         case SOP_ACTION_CLARIFY:
-          // Clarify: send a clarifying question (template-based).
-          console.log(
-            `[processor] Clarify for ${accountName}: ${latest.content}`,
-          );
-          actionResult = "clarify";
+          // No approved clarify template exists yet; hand off rather than silently ignore.
+          await this.responseSender.sendHumanHandoff({
+            accountId,
+            accountName,
+            message: latest.content,
+            reason: "klarifikasi belum punya template approved",
+          });
+          actionResult = "handoff";
           break;
 
         case SOP_ACTION_HANDOFF:
@@ -123,8 +143,12 @@ export class Processor {
               message: latest.content,
             });
 
+          if (!notifyRes?.ok) {
+            throw new Error("Notifikasi admin lokasi gagal dikirim.");
+          }
+
           await this.pendingStore.addTicket({
-            telegramMessageId: notifyRes?.messageId,
+            telegramMessageId: notifyRes.messageId,
             accountId,
             accountName,
             customerName: latest.sender,
@@ -168,6 +192,9 @@ export class Processor {
     } finally {
       await this.close();
     }
+    } finally {
+      releaseAccount();
+    }
   }
 
   /**
@@ -180,6 +207,8 @@ export class Processor {
       `[processor] Mengeksekusi balasan admin untuk tiket ${ticket.id} (${ticket.customerName} @ ${ticket.accountName})...`,
     );
 
+    const releaseAccount = await this._acquireAccount(ticket.accountId);
+    try {
     // 1) Buka sesi browser akun FB
     const session = await this.resolver.resolveSession(ticket.accountId);
     if (!session || !session.isLoggedIn) {
@@ -259,6 +288,9 @@ export class Processor {
       return { ok: true, ticketId: ticket.id };
     } finally {
       await this.close();
+    }
+    } finally {
+      releaseAccount();
     }
   }
 

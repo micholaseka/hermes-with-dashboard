@@ -29,7 +29,6 @@ const LOCATION_KEYWORDS = [
   "pengiriman",
   "shareloc",
   "share loc",
-  "share",
   "shere",
   "serlok",
   "ser lok",
@@ -136,7 +135,7 @@ export function classifyMessage({
     return SOP_ACTION_NO_ACTION;
   }
 
-  const text = `${sender || ""} ${content || ""}`;
+  const text = `${content || ""}`;
   const normalized = normalize(text);
 
   // 1) Location / address / COD questions -> notify admin

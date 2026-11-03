@@ -13,6 +13,11 @@ async function main() {
   const store = new PendingLocationStore({ storageDir });
   await store.load();
 
+  // Keep the fixture deterministic even if a previous test left pending tickets.
+  for (const pending of await store.listPending()) {
+    await store.markCompleted(pending.id);
+  }
+
   // Create a pending location ticket
   const ticketMsgId = "tg-msg-" + Date.now();
   const ticket = await store.addTicket({
@@ -61,8 +66,15 @@ async function main() {
 
   // Test 2: HTTP Endpoint POST /api/reply-location
   console.log("\n=== 2. Test: HTTP POST /api/reply-location endpoint ===");
+  const apiTicket = await store.addTicket({
+    telegramMessageId: `api-ticket-${Date.now()}`,
+    accountId: "1",
+    accountName: "Maratul Husna",
+    customerName: "Budi API",
+    customerMessage: "Lokasi API di mana kak?",
+  });
   const postData = JSON.stringify({
-    ticketId: ticket.id,
+    ticketId: apiTicket.id,
     replyText: "Lokasi kami di Durenan kak via API",
   });
 
@@ -74,6 +86,7 @@ async function main() {
         headers: {
           "Content-Type": "application/json",
           "Content-Length": Buffer.byteLength(postData),
+          "x-hermes-secret": process.env.HERMES_WEBHOOK_SECRET || "p1-test-secret",
         },
       },
       (res) => {

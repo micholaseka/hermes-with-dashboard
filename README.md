@@ -35,7 +35,7 @@ khusus engine ada di [`src/engine/README.md`](src/engine/README.md).
 Endpoint default:
 
 ```text
-http://localhost:8644/webhooks/BotWatcher-Dashboard
+http://localhost:8765/webhooks/BotWatcher-Dashboard
 ```
 
 Ubah endpoint dengan environment variable `HERMES_WEBHOOK_URL`. Setiap POST
