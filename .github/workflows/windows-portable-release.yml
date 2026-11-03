@@ -71,8 +71,8 @@ jobs:
           $env:PLAYWRIGHT_BROWSERS_PATH = "$env:GITHUB_WORKSPACE\playwright-browsers"
           pnpm exec patchright install chromium
 
-      - name: Build Windows Portable
-        run: npx --yes electron-builder@26.15.7 --win portable --x64 --publish never
+      - name: Build Windows EXE
+        run: npx --yes electron-builder@26.15.7 --win nsis portable --x64 --publish never
 
       - name: Show build output
         shell: pwsh
@@ -83,14 +83,14 @@ jobs:
       - name: Zip portable app
         shell: pwsh
         run: |
-          $portable = Get-ChildItem -Path release -Filter "BotWatcher-Dashboard-Portable-*" | Select-Object -First 1
-          if (-not $portable) {
-            Write-Error "Portable build tidak ditemukan di folder release/."
+          $unpacked = Get-ChildItem -Path release -Directory -Filter "win-unpacked" | Select-Object -First 1
+          if (-not $unpacked) {
+            Write-Error "Folder win-unpacked tidak ditemukan di release/."
             exit 1
           }
 
-          Write-Host "Meng-zip portable app: $($portable.Name)"
-          Compress-Archive -Path $portable.FullName -DestinationPath "BotWatcher-Dashboard-Portable.zip" -Force
+          Write-Host "Meng-zip portable app dari: $($unpacked.FullName)"
+          Compress-Archive -Path "$($unpacked.FullName)\*" -DestinationPath "BotWatcher-Dashboard-Portable.zip" -Force
           Write-Host "Zip created: BotWatcher-Dashboard-Portable.zip"
 
       - name: Verify zip contents (no sensitive files)
