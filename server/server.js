@@ -8,6 +8,24 @@ import { URL } from "node:url";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
+import fs from "node:fs";
+
+function loadEnvFile() {
+  const candidates = [
+    path.join(process.cwd(), ".env"),
+    path.join(os.homedir(), ".hermes", ".env"),
+  ];
+  for (const file of candidates) {
+    if (!fs.existsSync(file)) continue;
+    for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+      const match = line.match(/^\s*([A-Z0-9_]+)=(.*)\s*$/);
+      if (!match || process.env[match[1]]) continue;
+      process.env[match[1]] = match[2].replace(/^['\"]|['\"]$/g, "");
+    }
+  }
+}
+
+loadEnvFile();
 
 import { Processor } from "../src/hermes/processor.js";
 import { TelegramListener } from "../src/hermes/telegramListener.js";
@@ -16,9 +34,14 @@ const PORT = Number(process.env.PORT || 8765);
 const HOST = process.env.HERMES_HOST || "127.0.0.1";
 const WEBHOOK_PATH = "/webhooks/BotWatcher-Dashboard";
 const WEBHOOK_SECRET = process.env.HERMES_WEBHOOK_SECRET || "";
+const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "";
+const MAX_BODY_BYTES = 64 * 1024;
 
-function isAuthorized(req) {
-  return Boolean(WEBHOOK_SECRET) && req.headers["x-hermes-secret"] === WEBHOOK_SECRET;
+function isAuthorized(req, reqPath) {
+  const secret = reqPath === "/webhooks/telegram"
+    ? TELEGRAM_WEBHOOK_SECRET
+    : WEBHOOK_SECRET;
+  return Boolean(secret) && req.headers["x-hermes-secret"] === secret;
 }
 
 // ES module: __dirname equivalent
@@ -68,10 +91,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (!isAuthorized(req)) {
-    res.writeHead(WEBHOOK_SECRET ? 401 : 503, { "Content-Type": "application/json" });
+  const requiredSecret = reqPath === "/webhooks/telegram"
+    ? TELEGRAM_WEBHOOK_SECRET
+    : WEBHOOK_SECRET;
+  if (!isAuthorized(req, reqPath)) {
+    res.writeHead(requiredSecret ? 401 : 503, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
-      error: WEBHOOK_SECRET ? "Unauthorized" : "HERMES_WEBHOOK_SECRET belum dikonfigurasi",
+      error: requiredSecret ? "Unauthorized" : "Secret endpoint belum dikonfigurasi",
     }));
     return;
   }
@@ -89,7 +115,16 @@ const server = http.createServer(async (req, res) => {
   }
 
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let bodyBytes = 0;
+  for await (const chunk of req) {
+    bodyBytes += chunk.length;
+    if (bodyBytes > MAX_BODY_BYTES) {
+      res.writeHead(413, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Request body terlalu besar." }));
+      return;
+    }
+    chunks.push(chunk);
+  }
   const rawBody = Buffer.concat(chunks).toString("utf8");
 
   let payload = {};
@@ -125,12 +160,14 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ ok: true, ticketId: ticket.id }));
+      res.writeHead(202, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, accepted: true, ticketId: ticket.id }));
 
       void processor.handleAdminLocationReply({
         ticket,
         replyText,
+      }).catch((err) => {
+        console.error(`[location-reply] Gagal memproses tiket ${ticket.id}: ${err.message}`);
       });
     } catch (err) {
       res.writeHead(500, { "Content-Type": "application/json" });

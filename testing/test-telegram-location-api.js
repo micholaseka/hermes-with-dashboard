@@ -100,8 +100,9 @@ async function main() {
     req.end();
   });
 
-  assert.strictEqual(res.status, 200, "HTTP status harus 200");
+  assert.strictEqual(res.status, 202, "HTTP status harus 202 Accepted");
   assert.strictEqual(res.body.ok, true, "Response harus { ok: true }");
+  assert.strictEqual(res.body.accepted, true, "Response harus menandai pekerjaan diterima");
   console.log("✅ PASS: Endpoint POST /api/reply-location berhasil dipanggil dan merespons 200 OK.");
 }
 

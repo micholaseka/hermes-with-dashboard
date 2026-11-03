@@ -5,6 +5,8 @@
 
 import { app, BrowserWindow, ipcMain } from "electron";
 import path from "path";
+import fs from "fs";
+import os from "os";
 import { fileURLToPath } from "url";
 import { AccountManager } from "../src/accounts/accountManager.js";
 import { AccountRotator } from "../src/rotation/accountRotator.js";
@@ -23,6 +25,24 @@ let rotator = null;
 let manager = null;
 let managerInitPromise = null;
 let managerInitError = null;
+
+function loadEnvFile() {
+  const candidates = [
+    path.join(process.cwd(), ".env"),
+    path.join(os.homedir(), ".hermes", ".env"),
+  ];
+  for (const file of candidates) {
+    if (!fs.existsSync(file)) continue;
+    for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+      const match = line.match(/^\s*([A-Z0-9_]+)=(.*)\s*$/);
+      if (!match || process.env[match[1]]) continue;
+      process.env[match[1]] = match[2].replace(/^['"]|['"]$/g, "");
+    }
+    break;
+  }
+}
+
+loadEnvFile();
 
 async function initializeManager() {
   if (manager) return manager;
