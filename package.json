@@ -1,6 +1,6 @@
 {
   "name": "botwatcher-dashboard",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Desktop app Electron + React + Playwright untuk memantau Obrolan yang perlu dijawab Facebook Marketplace.",
   "main": "electron/main.mjs",
   "type": "module",
