@@ -1,0 +1,130 @@
+name: Windows Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate release tag
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $packageVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $expectedTag = "v$packageVersion"
+
+          if ($env:RELEASE_TAG -ne $expectedTag) {
+            Write-Error "Tag $env:RELEASE_TAG tidak cocok dengan versi package.json ($expectedTag)."
+            exit 1
+          }
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install UI dependencies
+        working-directory: ui-design
+        run: pnpm install --frozen-lockfile
+
+      - name: Build React UI
+        run: pnpm run build:ui
+
+      - name: Verify Electron UI asset paths
+        shell: pwsh
+        run: |
+          $html = Get-Content -Raw ui-design\dist\index.html
+          if ($html -notmatch 'src="\./assets/') {
+            Write-Error "Vite production assets are not relative. Electron file:// packaging would produce a blank screen."
+            exit 1
+          }
+
+      - name: Install bundled Chromium (patchright)
+        shell: pwsh
+        run: |
+          if (Test-Path playwright-browsers) {
+            Remove-Item -Recurse -Force playwright-browsers
+          }
+          $env:PLAYWRIGHT_BROWSERS_PATH = "$env:GITHUB_WORKSPACE\playwright-browsers"
+          pnpm exec patchright install chromium
+
+      - name: Build Windows installer and portable app
+        run: npx --yes electron-builder@26.15.7 --win nsis portable --x64 --publish never
+
+      - name: Smoke test packaged Windows app
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path release\win-unpacked -Filter "BotWatcherDashboard.exe" |
+            Select-Object -First 1
+
+          if (-not $exe) {
+            Write-Error "Executable Electron hasil unpack tidak ditemukan."
+            exit 1
+          }
+
+          $process = Start-Process `
+            -FilePath $exe.FullName `
+            -ArgumentList "--smoke-test-account-manager" `
+            -Wait `
+            -PassThru `
+            -WindowStyle Hidden
+
+          if ($process.ExitCode -ne 0) {
+            Write-Error "Packaged AccountManager smoke test gagal dengan exit code $($process.ExitCode)."
+            exit $process.ExitCode
+          }
+
+      - name: Package and verify portable ZIP
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $unpacked = Get-ChildItem -Path release -Directory -Filter "win-unpacked" |
+            Select-Object -First 1
+          if (-not $unpacked) {
+            Write-Error "Folder win-unpacked tidak ditemukan di release/."
+            exit 1
+          }
+
+          $zipPath = "BotWatcher-Dashboard-Portable-$env:RELEASE_TAG.zip"
+          Compress-Archive -Path "$($unpacked.FullName)\*" -DestinationPath $zipPath -Force
+
+          Expand-Archive -Path $zipPath -DestinationPath portable-check -Force
+          $sensitive = Get-ChildItem -Path portable-check -Recurse -File | Where-Object {
+            $_.Name -match "^(\.env|accounts\.json|pending_locations\.json|botwatcher\.db|.*\.log)$"
+          }
+
+          if ($sensitive) {
+            $sensitive | ForEach-Object { Write-Error "Zip mengandung file sensitif: $($_.FullName)" }
+            exit 1
+          }
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: BotWatcher Dashboard ${{ github.ref_name }}
+          generate_release_notes: true
+          overwrite_files: true
+          files: |
+            release/*.exe
+            release/*.yml
+            release/*.blockmap
+            BotWatcher-Dashboard-Portable-${{ github.ref_name }}.zip

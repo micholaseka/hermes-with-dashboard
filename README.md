@@ -158,28 +158,18 @@ Artefak build berada di `release/`. Installer untuk user bernama seperti
 `BotWatcher-Dashboard-Setup-2.1.0-x64.exe`; artefak `Portable` tidak
 meng-upgrade instalasi NSIS.
 
-GitHub Actions workflow ada di
-`.github/workflows/windows-release.yml`:
-
-- Push ke `main` dan run manual membangun UI dan Chromium Patchright di
-  Windows, lalu menjalankan smoke test packaged Windows app. Workflow ini
-  tidak menunggu build Linux.
-- Jika build berhasil dan tag `v<versi package.json>` belum ada, workflow
-  membuat tag. Jika GitHub Release untuk tag itu belum ada, workflow membuat
-  release dan mengunggah artefak `.exe`, `.yml`, serta `.blockmap`.
-- Run manual (`workflow_dispatch`) wajib memasukkan tag yang sama dengan
-  versi di `package.json`; saat ini default-nya `v2.1.0`.
-- Jika tag sudah ada tetapi GitHub Release belum ada, push ke `main` tetap
-  membuat release. Jika release sudah ada, push tidak menerbitkan ulang
-  release tersebut. Untuk rilis berikutnya, naikkan `version` di
-  `package.json`.
+GitHub Actions release ada di `.github/workflows/release.yml`. Push tag
+`v*` akan memvalidasi tag terhadap versi `package.json`, membangun aplikasi
+di Windows, menjalankan smoke test, lalu membuat GitHub Release berisi
+installer NSIS, artefak Portable, dan Portable ZIP. Untuk rilis berikutnya,
+naikkan `version` di `package.json`, buat tag `v<versi>`, lalu push tag itu.
 
 Sebelum rilis: cek versi dan tag, pastikan workflow selesai sukses, lalu
 unduh Setup EXE dari GitHub Release dan uji upgrade tanpa menghapus instalasi
 lama maupun direktori data pengguna.
 
-Workflow GitHub Actions release saat ini hanya membuat artefak Windows.
-Paket Linux `.deb` dan `.rpm` tidak dibuat atau dilampirkan oleh workflow ini.
+Workflow release membuat artefak Windows. Paket Linux `.deb` dan `.rpm`
+tidak dibuat atau dilampirkan.
 
 ## Struktur proyek
 
