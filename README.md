@@ -5,7 +5,7 @@ Facebook Marketplace dan jumlah percakapan yang perlu dijawab. Aplikasi
 menjalankan pengecekan akun bergiliran, menampilkan statusnya di dashboard,
 dan dapat mengirim notifikasi ke Telegram serta webhook lokal Hermes.
 
-**Versi source saat ini: `2.0.0`** (tag release yang direncanakan: `v2.0.0`).
+**Versi source saat ini: `2.1.0`** (tag release: `v2.1.0`).
 Sesi browser menggunakan koneksi jaringan langsung; pengaturan dan import
 proxy tidak tersedia.
 
@@ -155,7 +155,7 @@ npx --yes electron-builder@26.15.7 --win nsis portable --x64 --publish never
 ```
 
 Artefak build berada di `release/`. Installer untuk user bernama seperti
-`BotWatcher-Dashboard-Setup-2.0.0-x64.exe`; artefak `Portable` tidak
+`BotWatcher-Dashboard-Setup-2.1.0-x64.exe`; artefak `Portable` tidak
 meng-upgrade instalasi NSIS.
 
 GitHub Actions workflow ada di
@@ -168,7 +168,7 @@ GitHub Actions workflow ada di
   membuat tag. Jika GitHub Release untuk tag itu belum ada, workflow membuat
   release dan mengunggah artefak `.exe`, `.yml`, serta `.blockmap`.
 - Run manual (`workflow_dispatch`) wajib memasukkan tag yang sama dengan
-  versi di `package.json`; saat ini default-nya `v2.0.0`.
+  versi di `package.json`; saat ini default-nya `v2.1.0`.
 - Jika tag sudah ada tetapi GitHub Release belum ada, push ke `main` tetap
   membuat release. Jika release sudah ada, push tidak menerbitkan ulang
   release tersebut. Untuk rilis berikutnya, naikkan `version` di
