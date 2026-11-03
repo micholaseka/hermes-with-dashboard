@@ -3,6 +3,12 @@
 cd /home/masterhand/Projects/BotWatcher-Dashboard-source || exit 1
 if ! pgrep -f "node server/server.js" > /dev/null 2>&1; then
   export BOTWATCHER_DATA_DIR="${BOTWATCHER_DATA_DIR:-/home/masterhand/.config/Electron}"
+  # Load project .env if present
+  if [ -f ".env" ]; then
+    set -a
+    source .env
+    set +a
+  fi
   # Load Telegram credentials from Hermes .env
   if [ -f /home/masterhand/.hermes/.env ]; then
     export TELEGRAM_BOT_TOKEN="$(grep '^TELEGRAM_BOT_TOKEN=' /home/masterhand/.hermes/.env | cut -d= -f2-)"

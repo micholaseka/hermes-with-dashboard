@@ -66,8 +66,16 @@ export class TelegramListener {
 
         if (data.ok && Array.isArray(data.result)) {
           for (const update of data.result) {
-            this.offset = update.update_id + 1;
-            await this.handleUpdate(update);
+            try {
+              await this.handleUpdate(update);
+              this.offset = update.update_id + 1;
+            } catch (err) {
+              console.error(
+                `[telegram-listener] Update ${update.update_id} gagal diproses; akan dicoba lagi: ${err.message}`,
+              );
+              await new Promise((r) => setTimeout(r, 5000));
+              break;
+            }
           }
         } else {
           await new Promise((r) => setTimeout(r, 3000));
@@ -110,7 +118,10 @@ export class TelegramListener {
 
     // 2) Jika bukan reply spesifik, cek apakah admin mengisi template lokasi
     if (!ticket && /lokasi kami di|bisa cod|free ongkir/i.test(text)) {
-      ticket = await this.pendingStore.getLatestPending();
+      console.warn(
+        "[telegram-listener] Balasan template harus memakai Reply pada notifikasi tiket; fallback tanpa tiket dinonaktifkan.",
+      );
+      return;
     }
 
     if (!ticket) {
@@ -134,7 +145,7 @@ export class TelegramListener {
         `[telegram-listener] Gagal mengirim balasan ke FB: ${err.message}`,
       );
       if (this.responseSender) {
-        await this.responseSender.sendTelegramMessage(
+        await this.responseSender.sendTelegramMessageWithRetry(
           `❌ Gagal mengirim balasan ke ${ticket.customerName} (${ticket.accountName}): ${err.message}`,
         );
       }

@@ -29,6 +29,12 @@ loadEnvFile();
 
 import { Processor } from "../src/hermes/processor.js";
 import { TelegramListener } from "../src/hermes/telegramListener.js";
+import { assertTelegramTokenIsolation } from "../src/config/telegram.config.js";
+
+assertTelegramTokenIsolation({
+  agentToken: process.env.TELEGRAM_AGENT_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN_AGENT,
+  csToken: process.env.TELEGRAM_CS_BOT_TOKEN,
+});
 
 const PORT = Number(process.env.PORT || 8765);
 const HOST = process.env.HERMES_HOST || "127.0.0.1";
@@ -85,6 +91,18 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const reqPath = url.pathname;
 
+  // Health check endpoint for monitoring/uptime checks
+  if (req.method === "GET" && reqPath === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      ok: true,
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      telegram: !!TELEGRAM_BOT_TOKEN,
+    }));
+    return;
+  }
+
   if (req.method !== "POST") {
     res.writeHead(405, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Method not allowed" }));
@@ -134,6 +152,14 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Invalid JSON: " + err.message }));
     return;
+  }
+
+  if (reqPath !== "/api/reply-location") {
+    if (!payload || typeof payload !== "object" || !payload.accountId || !payload.accountName) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Payload wajib berisi 'accountId' dan 'accountName'." }));
+      return;
+    }
   }
 
   // 1) Route balasan lokasi admin via API HTTP
@@ -212,7 +238,7 @@ const server = http.createServer(async (req, res) => {
         err.message.includes("tidak bisa diakses") ||
         err.message.includes("tidak valid")
       ) {
-        await processor.responseSender.sendTelegramMessage(
+        await processor.responseSender.sendTelegramMessageWithRetry(
           `⚠️ PERINGATAN: Sesi akun FB "${payload.accountName ?? payload.accountId}" bermasalah!\nDetail: ${err.message}\nSilakan login ulang manual via dashboard.`,
         );
       }

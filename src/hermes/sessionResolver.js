@@ -28,8 +28,10 @@ export class HermesSessionResolver extends EventEmitter {
   }
 
   async resolveSession(accountId) {
+    const accountKey = String(accountId);
+
     // 1) Try permanent profile directory
-    const profileDir = path.join(this.profileDirectory, accountId);
+    const profileDir = path.join(this.profileDirectory, accountKey);
     try {
       await fs.access(profileDir);
       const session = await this.ensureSession(accountId);
@@ -39,7 +41,7 @@ export class HermesSessionResolver extends EventEmitter {
     }
 
     // 2) Try legacy JSON session file (storageState.json format)
-    const legacyFile = path.join(this.sessionDirectory, `${accountId}.json`);
+    const legacyFile = path.join(this.sessionDirectory, `${accountKey}.json`);
     try {
       await fs.access(legacyFile);
       const session = await this.ensureSession(accountId);

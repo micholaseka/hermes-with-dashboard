@@ -8,8 +8,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 export class PendingLocationStore {
-  constructor({ storageDir = "/home/masterhand/Projects/BotWatcher-Dashboard-source/storage" } = {}) {
-    this.filePath = path.join(storageDir, "pending_locations.json");
+  constructor({ storageDir } = {}) {
+    this.filePath =
+      storageDir ||
+      process.env.HERMES_STORAGE_DIR ||
+      path.join(process.cwd(), "storage", "pending_locations.json");
     this.tickets = [];
     this._loaded = false;
   }

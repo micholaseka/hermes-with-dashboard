@@ -1,0 +1,171 @@
+name: Windows Portable Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag, harus cocok dengan versi di package.json"
+        required: true
+        default: "v2.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-portable:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate manual release version
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          $packageVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $expectedTag = "v$packageVersion"
+
+          if ("${{ inputs.version }}" -ne $expectedTag) {
+            Write-Error "Release tag harus $expectedTag agar cocok dengan versi installer."
+            exit 1
+          }
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install UI dependencies
+        working-directory: ui-design
+        run: pnpm install --frozen-lockfile
+
+      - name: Build React UI
+        run: pnpm run build:ui
+
+      - name: Verify Electron UI asset paths
+        shell: pwsh
+        run: |
+          $html = Get-Content -Raw ui-design\dist\index.html
+          if ($html -notmatch 'src="\./assets/') {
+            Write-Error "Vite production assets are not relative. Electron file:// packaging would produce a blank screen."
+            exit 1
+          }
+          Write-Host "Electron UI asset path check passed."
+
+      - name: Install bundled Chromium (patchright)
+        shell: pwsh
+        run: |
+          if (Test-Path playwright-browsers) {
+            Remove-Item -Recurse -Force playwright-browsers
+          }
+          $env:PLAYWRIGHT_BROWSERS_PATH = "$env:GITHUB_WORKSPACE\playwright-browsers"
+          pnpm exec patchright install chromium
+
+      - name: Build Windows Portable
+        run: npx --yes electron-builder@26.15.7 --win portable --x64 --publish never
+
+      - name: Show build output
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path release -File |
+            Select-Object Name, Length
+
+      - name: Zip portable app
+        shell: pwsh
+        run: |
+          $portable = Get-ChildItem -Path release -Filter "BotWatcher-Dashboard-Portable-*" | Select-Object -First 1
+          if (-not $portable) {
+            Write-Error "Portable build tidak ditemukan di folder release/."
+            exit 1
+          }
+
+          Write-Host "Meng-zip portable app: $($portable.Name)"
+          Compress-Archive -Path $portable.FullName -DestinationPath "BotWatcher-Dashboard-Portable.zip" -Force
+          Write-Host "Zip created: BotWatcher-Dashboard-Portable.zip"
+
+      - name: Verify zip contents (no sensitive files)
+        shell: pwsh
+        run: |
+          $zipPath = "BotWatcher-Dashboard-Portable.zip"
+          if (-not (Test-Path $zipPath)) {
+            Write-Error "Zip file tidak ditemukan."
+            exit 1
+          }
+
+          Expand-Archive -Path $zipPath -DestinationPath "portable-check" -Force
+          $sensitive = Get-ChildItem -Path "portable-check" -Recurse -File | Where-Object {
+            $_.Name -match "^(\.env|accounts\.json|pending_locations\.json|botwatcher\.db|.*\.log)$"
+          }
+
+          if ($sensitive) {
+            Write-Error "Zip mengandung file sensitif:"
+            $sensitive | ForEach-Object { Write-Error "  $($_.FullName)" }
+            Remove-Item -Recurse -Force "portable-check"
+            exit 1
+          }
+
+          Write-Host "Zip bersih dari file sensitif."
+          Remove-Item -Recurse -Force "portable-check"
+
+      - name: Prepare release tag from package version
+        id: release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tag = "v$version"
+
+          git fetch --tags --force
+
+          if (-not (git tag --list $tag)) {
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag $tag
+            git push origin $tag
+
+            if ($LASTEXITCODE -ne 0) {
+              throw "Gagal mengirim tag $tag ke origin."
+            }
+
+            Write-Host "Tag $tag berhasil dibuat dan dipush."
+          } else {
+            Write-Host "Tag $tag sudah ada."
+          }
+
+          gh release view $tag --json tagName *> $null
+          $releaseExists = $LASTEXITCODE -eq 0
+
+          if ($releaseExists) {
+            Write-Host "GitHub Release $tag sudah ada. Tidak membuat ulang."
+            "created=false" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "GitHub Release $tag belum ada dan akan dibuat."
+            "created=true" >> $env:GITHUB_OUTPUT
+          }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        if: |
+          github.event_name == 'workflow_dispatch' ||
+          (github.event_name == 'push' &&
+           github.ref == 'refs/heads/main' &&
+           steps.release.outputs.created == 'true')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.version || steps.release.outputs.tag }}
+          name: BotWatcher Dashboard ${{ github.event_name == 'workflow_dispatch' && inputs.version || steps.release.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            BotWatcher-Dashboard-Portable.zip

@@ -19,10 +19,34 @@ import { FBMarketplaceReplySender } from "./fbMarketplaceReplySender.js";
 import { Logger } from "./logger.js";
 import { PendingLocationStore } from "./pendingStore.js";
 
+/** Simple retry with exponential backoff for transient browser/network errors. */
+async function retry(fn, { retries = 2, delayMs = 1000 } = {}) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const isRetryable =
+        err?.name === "TimeoutError" ||
+        err?.message?.includes("tidak bisa diakses") ||
+        err?.message?.includes("tidak valid") ||
+        err?.message?.includes("ECONNREFUSED") ||
+        err?.message?.includes("net::ERR_");
+      if (!isRetryable || attempt === retries) throw err;
+      const wait = delayMs * attempt;
+      console.warn(
+        `[retry] Percobaan ${attempt}/${retries} gagal: ${err.message}. Mencoba lagi dalam ${wait}ms...`,
+      );
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+}
+
 export class Processor {
   constructor({ projectRoot, telegramBotToken, telegramChatId } = {}) {
     const root =
-      projectRoot || "/home/masterhand/Projects/BotWatcher-Dashboard-source";
+      projectRoot ||
+      process.env.HERMES_PROJECT_ROOT ||
+      "/home/masterhand/Projects/BotWatcher-Dashboard-source";
     this.resolver = new HermesSessionResolver({ projectRoot: root });
     this.responseSender = new ResponseSender({
       telegramBotToken,
@@ -210,7 +234,9 @@ export class Processor {
     const releaseAccount = await this._acquireAccount(ticket.accountId);
     try {
     // 1) Buka sesi browser akun FB
-    const session = await this.resolver.resolveSession(ticket.accountId);
+    const session = await retry(() =>
+      this.resolver.resolveSession(ticket.accountId),
+    );
     if (!session || !session.isLoggedIn) {
       throw new Error(
         `Sesi login tidak valid untuk akun "${ticket.accountId}".`,
@@ -222,10 +248,12 @@ export class Processor {
       const { marketplaceInboxSelectors: sel } = await import(
         "../monitor/selectors.js"
       );
-      await session.page.goto(sel.sellerInboxUrl, {
-        waitUntil: "domcontentloaded",
-        timeout: 30000,
-      });
+      await retry(() =>
+        session.page.goto(sel.sellerInboxUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: 30000,
+        }),
+      );
       await session.page.waitForTimeout(4000);
 
       // 3) Cari obrolan pembeli yang sesuai
@@ -259,7 +287,7 @@ export class Processor {
 
       // 4) Kirim balasan admin via FBMarketplaceReplySender (1 bubble)
       const replySender = new FBMarketplaceReplySender({ page: session.page });
-      await replySender.sendReply(replyText);
+      await retry(() => replySender.sendReply(replyText), { retries: 2, delayMs: 1500 });
 
       // 5) Update tiket pending menjadi completed
       await this.pendingStore.markCompleted(ticket.id);
@@ -278,8 +306,11 @@ export class Processor {
       });
 
       // 7) Kirim konfirmasi balik ke Telegram admin
-      await this.responseSender.sendTelegramMessage(
-        `✅ [SELESAI_LOKASI] Balasan lokasi berhasil dikirim ke ${ticket.customerName} di akun ${ticket.accountName}!`,
+      await retry(() =>
+        this.responseSender.sendTelegramMessage(
+          `✅ [SELESAI_LOKASI] Balasan lokasi berhasil dikirim ke ${ticket.customerName} di akun ${ticket.accountName}!`,
+        ),
+        { retries: 2, delayMs: 1000 },
       );
 
       console.log(

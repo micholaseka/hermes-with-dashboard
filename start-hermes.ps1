@@ -5,7 +5,30 @@ Set-Location $ScriptDir
 $env:PORT = if ($env:PORT) { $env:PORT } else { "8765" }
 $env:NODE_ENV = "production"
 
-# Muat Telegram credentials dari ~/.hermes/.env jika ada
+# Muat kredensial dari .env lokal jika ada
+$localEnv = Join-Path $ScriptDir ".env"
+if (Test-Path $localEnv) {
+    Get-Content $localEnv | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -match "^TELEGRAM_CS_BOT_TOKEN=(.+)$") {
+            $env:TELEGRAM_CS_BOT_TOKEN = $matches[1].Trim()
+        }
+        if ($line -match "^TELEGRAM_CHAT_ID=(.+)$") {
+            $env:TELEGRAM_CHAT_ID = $matches[1].Trim()
+        }
+        if ($line -match "^HERMES_WEBHOOK_SECRET=(.+)$") {
+            $env:HERMES_WEBHOOK_SECRET = $matches[1].Trim()
+        }
+        if ($line -match "^ENGINE_MODE=(.+)$") {
+            $env:ENGINE_MODE = $matches[1].Trim()
+        }
+        if ($line -match "^BOTWATCHER_DATA_DIR=(.+)$") {
+            $env:BOTWATCHER_DATA_DIR = $matches[1].Trim()
+        }
+    }
+}
+
+# Muat Telegram credentials dari Hermes .env jika ada
 $envFile = Join-Path $env:USERPROFILE ".hermes\.env"
 if (Test-Path $envFile) {
     Get-Content $envFile | ForEach-Object {

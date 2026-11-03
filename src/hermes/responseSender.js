@@ -40,6 +40,21 @@ export class ResponseSender {
     }
   }
 
+  /** Send general text message to admin Telegram with simple retry. */
+  async sendTelegramMessageWithRetry(text, retries = 2, delayMs = 1000) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      const result = await this.sendTelegramMessage(text);
+      if (result.ok) return result;
+      if (attempt === retries) return result;
+      const wait = delayMs * attempt;
+      console.warn(
+        `[telegram-retry] Percobaan ${attempt}/${retries} gagal. Mencoba lagi dalam ${wait}ms...`,
+      );
+      await new Promise((r) => setTimeout(r, wait));
+    }
+    return { ok: false, messageId: null };
+  }
+
   /** Send Telegram admin notification for location/address/COD questions per SOP. */
   async sendTelegramAdminNotification({
     accountId,

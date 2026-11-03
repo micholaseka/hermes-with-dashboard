@@ -11,7 +11,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-const VAULT_ROOT = "/home/masterhand/Documents/Hermes-Marketplace-inbox";
+const VAULT_ROOT =
+  process.env.HERMES_VAULT_ROOT ||
+  "/home/masterhand/Documents/Hermes-Marketplace-inbox";
 
 const CATEGORY_MAP = {
   reply: "reply",
